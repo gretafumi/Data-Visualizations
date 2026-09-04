@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>Model performance across training sample sizes</title>
+<style>
+  body {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: #ffffff;
+    color: #222222;
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 0 20px;
+  }
+  .header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+    color: #222222;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #666666;
+    margin: 0;
+  }
+  select {
+    font-size: 13px;
+    padding: 6px 10px;
+    border: 1px solid #cfc6b8;
+    border-radius: 4px;
+    background: #F5F2EC;
+    color: #333333;
+  }
+  table {
+    border-collapse: separate;
+    border-spacing: 3px;
+    margin-top: 10px;
+  }
+  th {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #333333;
+    padding-bottom: 8px;
+    text-align: center;
+    white-space: pre-line;
+  }
+  .row-label {
+    font-size: 12.5px;
+    color: #444444;
+    text-align: right;
+    padding-right: 10px;
+    white-space: nowrap;
+  }
+  td.cell {
+    width: 118px;
+    height: 78px;
+    text-align: center;
+    vertical-align: middle;
+    border-radius: 3px;
+  }
+  .cell .val {
+    font-size: 14px;
+    font-weight: 600;
+    display: block;
+  }
+  .cell .unit {
+    font-size: 9.5px;
+    display: block;
+    margin-top: 2px;
+  }
+  .axis-label {
+    font-size: 12.5px;
+    color: #555555;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    text-align: center;
+  }
+  .note {
+    font-size: 11.5px;
+    color: #666666;
+    margin-top: 22px;
+    max-width: 700px;
+    line-height: 1.5;
+  }
+  .source {
+    font-size: 10.5px;
+    color: #888888;
+    margin-top: 6px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header-row">
+  <div>
+    <h1>Model performance across training sample sizes</h1>
+    <p class="subtitle" id="subtitle">Test-set RMSE for SMI option pricing · Low-volatility regime (2024)</p>
+  </div>
+  <div>
+    <label for="regime" style="font-size:13px; color:#555; margin-right:6px;">Regime:</label>
+    <select id="regime">
+      <option value="2024" selected>2024 · Low volatility</option>
+      <option value="2020">2020 · High volatility</option>
+    </select>
+  </div>
+</div>
+
+<div style="display:flex;">
+  <div class="axis-label">Training sample size (N)</div>
+  <table id="matrix"></table>
+</div>
+
+<p class="note">
+Lower RMSE indicates better out-of-sample pricing accuracy. Values above 70 CHF are visually capped for colour comparability.
+</p>
+<p class="source">
+Source: Author's calculations based on SMI option data. Results reported in Table 3.11.
+</p>
+
+<script>
+const sampleSizes = ["100","250","500","1,000","2,500","5,000"];
+const models = ["XGBoost\nMoneyness","Neural Network\nMoneyness","XGBoost\nLevels","Neural Network\nLevels"];
+
+const rmse2020 = [
+  [44.85, 37.13, 291.25, 31.60],
+  [36.97, 31.30,  56.40, 32.33],
+  [33.24, 31.26,  34.49, 31.47],
+  [30.25, 31.10,  33.50, 32.78],
+  [32.62, 31.10,  30.57, 32.40],
+  [31.84, 31.09,  25.91, 31.08]
+];
+
+const rmse2024 = [
+  [27.74, 15.21, 66.06, 19.67],
+  [16.56, 12.08, 16.11, 19.06],
+  [14.30, 11.03, 14.64, 12.62],
+  [15.02, 11.05, 13.51, 11.66],
+  [12.47, 11.17, 12.31, 11.89],
+  [12.98, 11.06, 13.63, 10.72]
+];
+
+// academic colour scale (matches the matplotlib LinearSegmentedColormap)
+const stops = [
+  [0.000, [245,242,236]], // #F5F2EC
+  [0.200, [217,209,198]], // #D9D1C6
+  [0.400, [184,169,155]], // #B8A99B
+  [0.600, [141,119,104]], // #8D7768
+  [0.800, [95,74,61]],    // #5F4A3D
+  [1.000, [50,38,31]]     // #32261F
+];
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function getColor(value) {
+  const vmin = 10, vmax = 70;
+  const capped = Math.min(value, 70);
+  let t = (capped - vmin) / (vmax - vmin);
+  t = Math.max(0, Math.min(1, t));
+
+  for (let i = 0; i < stops.length - 1; i++) {
+    const [t0, c0] = stops[i];
+    const [t1, c1] = stops[i+1];
+    if (t >= t0 && t <= t1) {
+      const localT = (t - t0) / (t1 - t0);
+      const r = Math.round(lerp(c0[0], c1[0], localT));
+      const g = Math.round(lerp(c0[1], c1[1], localT));
+      const b = Math.round(lerp(c0[2], c1[2], localT));
+      return { rgb: `rgb(${r},${g},${b})`, capped };
+    }
+  }
+  return { rgb: `rgb(${stops[stops.length-1][1].join(',')})`, capped };
+}
+
+function render(regime) {
+  const data = regime === "2020" ? rmse2020 : rmse2024;
+  const subtitleText = regime === "2020"
+    ? "Test-set RMSE for SMI option pricing · High-volatility regime (2020)"
+    : "Test-set RMSE for SMI option pricing · Low-volatility regime (2024)";
+  document.getElementById("subtitle").textContent = subtitleText;
+
+  const table = document.getElementById("matrix");
+  table.innerHTML = "";
+
+  // header row
+  const headRow = document.createElement("tr");
+  headRow.appendChild(document.createElement("th")); // empty corner
+  models.forEach(m => {
+    const th = document.createElement("th");
+    th.textContent = m;
+    headRow.appendChild(th);
+  });
+  table.appendChild(headRow);
+
+  // data rows
+  for (let i = 0; i < sampleSizes.length; i++) {
+    const tr = document.createElement("tr");
+
+    const rowLabel = document.createElement("td");
+    rowLabel.className = "row-label";
+    rowLabel.textContent = sampleSizes[i];
+    tr.appendChild(rowLabel);
+
+    for (let j = 0; j < models.length; j++) {
+      const value = data[i][j];
+      const { rgb, capped } = getColor(value);
+      const textColor = capped > 35 ? "#ffffff" : "#222222";
+
+      const td = document.createElement("td");
+      td.className = "cell";
+      td.style.background = rgb;
+      td.innerHTML = `<span class="val" style="color:${textColor}">${value.toFixed(2)}</span><span class="unit" style="color:${textColor}">CHF</span>`;
+      tr.appendChild(td);
+    }
+    table.appendChild(tr);
+  }
+}
+
+document.getElementById("regime").addEventListener("change", (e) => {
+  render(e.target.value);
+});
+
+render("2024");
+</script>
+
+</body>
+</html>
